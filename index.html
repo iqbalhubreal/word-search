@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wordsearch Workshop | ZIP Builder</title>
+<style>
+:root{color-scheme:light dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif}body{max-width:760px;margin:0 auto;padding:24px;line-height:1.55}main{border:1px solid #8885;border-radius:18px;padding:24px}h1{line-height:1.15}button{font:inherit;font-weight:650;border:0;border-radius:10px;padding:13px 18px;cursor:pointer;background:#3154db;color:white}button:disabled{opacity:.55;cursor:wait}#status{min-height:2.5em;margin-top:14px;white-space:pre-wrap;overflow-wrap:anywhere}.small{font-size:.92rem;opacity:.82}code{overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<main>
+<h1>Wordsearch Workshop ZIP Builder</h1>
+<p>This builder retrieves the repository file objects by their saved Git blob IDs, applies the requested fixes, and downloads a ZIP containing <code>index.html</code> plus the complete <code>source/</code> folder and original supporting files.</p>
+<p><strong>Included updates:</strong> clearer editable text fields, adjustable grid-letter size, word-bank row/column controls, individual puzzle titles, per-page layout editing with an “Apply to all” checkbox, and bulk generation with a save confirmation.</p>
+<button id="build">Build and download ZIP</button>
+<div id="status" role="status" aria-live="polite">Ready. Internet access is needed to retrieve the saved file objects from GitHub.</div>
+<p class="small">The original GitHub repository is not modified. This creates a separate local ZIP file.</p>
+</main>
+<script>
+'use strict';
+const REPO='iqbalhubreal/word-search';
+const FILES=[
+ ['README.txt','e45147d2ef089cf2d9f5a4b6b6e42c9128bdb6c7'],
+ ['index.html','c9798f17e3b96f07a809c11172f26d6a7e82d355'],
+ ['source/head.html','357410f5e999691777f722fd9fb82f533075f5b8'],
+ ['source/body.html','05f1f7cc086e07babcafdc780c9b44a3b7099dab'],
+ ['source/langs.js','57762ac7558490634f8cc8e695cbab09f6e0d754'],
+ ['source/engine.js','1c764841fe9bd01e243d89af1e6886833d08b4b4'],
+ ['source/render.js','576fe8c013d4b1d1e5ae1345864a23be23da5996'],
+ ['source/app-core.js','0f2526dfb94a17441b71db10db75373cb142dc04'],
+ ['source/app-ui.js','bb3f6627f444b9f1944d99543a1122113208c9ae'],
+ ['source/app-lang.js','a4611b61ab0f790a3b22073269f1536385d4a09c'],
+ ['source/app-lib.js','82ecd125a3d3f048aab95fb4c93afbafe062f106'],
+ ['source/app-book.js','06e1babe449b27b1219cd92a7dfbbb7bc2cf656d'],
+ ['source/app-ai.js','8b465f421b74ae481b353000efbf6c081ba1906c'],
+ ['source/app-init.js','cc6da6b1925d6ee1cd7e55515723c83c8b1423d5'],
+ ['source/build.sh','665161d443a950addbb1afaf40b38d499a19dabf']
+];
+const $=id=>document.getElementById(id);
+function setStatus(t){$('status').textContent=t;}
+function patch(files,path,oldText,newText){const s=files[path];if(typeof s!=='string')throw Error('File not found in the recovered sources: '+path);const n=s.split(oldText).length-1;if(n!==1)throw Error('Could not safely update '+path+'. Expected one match but found '+n+'.');files[path]=s.replace(oldText,newText);}
+function both(files,path,oldText,newText){patch(files,path,oldText,newText);patch(files,'index.html',oldText,newText);}
+async function fetchBlob(path,sha){const url='https://api.github.com/repos/'+REPO+'/git/blobs/'+sha;const res=await fetch(url,{headers:{Accept:'application/vnd.github+json'}});if(!res.ok)throw Error('GitHub returned HTTP '+res.status+' while reading '+path+'. The saved blob might no longer be accessible.');const obj=await res.json();if(obj.encoding!=='base64'||!obj.content)throw Error('Unexpected GitHub blob response for '+path);const bin=atob(obj.content.replace(/\s/g,''));const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return new TextDecoder('utf-8').decode(bytes);}
+function applyFixes(F){
+ both(F,'source/head.html','min-height: 48px; min-width: 0; width: 100%;\n}','min-height: 48px; min-width: 0; width: 100%; caret-color: var(--ink); -webkit-user-select: text; user-select: text;\n}');
+ const bankOld='<select id="listMode"><option value="below">Below the grid</option><option value="beside">Beside the grid</option><option value="none">Hidden</option></select>\n                </label>\n                <label class="switch" for="lines">';
+ const bankNew='<select id="listMode"><option value="below">Below the grid</option><option value="beside">Beside the grid</option><option value="none">Hidden</option></select>\n                </label>\n                <div class="two list-layout-controls">\n                  <label class="f" for="listArrange">Word bank layout\n                    <select id="listArrange"><option value="auto">Automatic</option><option value="columns">Choose columns</option><option value="rows">Choose rows</option></select>\n                  </label>\n                  <label class="f" for="listArrangeCount"><span id="listArrangeCountLbl">Number of columns</span>\n                    <input id="listArrangeCount" type="number" min="1" max="12" step="1" value="2" inputmode="numeric">\n                  </label>\n                </div>\n                <p class="hint">Choose a row or column count. The other count is calculated from the number of words.</p>\n                <label class="switch" for="lines">';
+ patch(F,'source/body.html',bankOld,bankNew);patch(F,'index.html',bankOld,bankNew);
+ const sliderOld='<div class="slider"><label for="sList">Word bank</label><input id="sList" type="range" min="50" max="200" step="5" value="100"><output id="sListOut" for="sList">100%</output></div>\n                <div class="slider"><label for="sMargin">Margin</label>';
+ const sliderNew='<div class="slider"><label for="sList">Word bank</label><input id="sList" type="range" min="50" max="200" step="5" value="100"><output id="sListOut" for="sList">100%</output></div>\n                <div class="slider"><label for="sGrid">Grid letters</label><input id="sGrid" type="range" min="50" max="150" step="5" value="100"><output id="sGridOut" for="sGrid">100%</output></div>\n                <div class="slider"><label for="sMargin">Margin</label>';
+ patch(F,'source/body.html',sliderOld,sliderNew);patch(F,'index.html',sliderOld,sliderNew);
+ both(F,'source/app-core.js',"showTitle: $('showTitle').checked, title: $('title').value, list: $('listMode').value,\n    solution: S.solution","showTitle: $('showTitle').checked, title: $('title').value, list: $('listMode').value,\n    listArrange: $('listArrange').value, listArrangeCount: parseInt($('listArrangeCount').value, 10) || 2,\n    solution: S.solution");
+ both(F,'source/app-core.js',"WSR.drawGrid(ctx, pad, pad, cell, S.puz, { solution: S.solution, lines: $('lines').checked, outline: $('outline').checked });","WSR.drawGrid(ctx, pad, pad, cell, S.puz, { solution: S.solution, lines: $('lines').checked, outline: $('outline').checked, fontScale: layoutOpts().gridScale });");
+ both(F,'source/app-ui.js',"['showTitle', 'title', 'listMode', 'lines', 'outline'].forEach((id) => {\n  $(id).addEventListener('input', () => render());\n  $(id).addEventListener('change', () => render());\n});","['showTitle', 'title', 'listMode', 'listArrange', 'listArrangeCount', 'lines', 'outline'].forEach((id) => {\n  $(id).addEventListener('input', () => render());\n  $(id).addEventListener('change', () => render());\n});\nfunction syncListArrangeUi() {\n  const mode = $('listArrange').value;\n  $('listArrangeCount').disabled = mode === 'auto';\n  $('listArrangeCountLbl').textContent = mode === 'rows' ? 'Number of rows' : 'Number of columns';\n}\n$('listArrange').addEventListener('change', syncListArrangeUi);\nsyncListArrangeUi();");
+ both(F,'source/render.js',"ctx.font = '600 ' + cell * 0.56 * (CUR.glyph || 1) + 'px ' + FONT_MONO;","const fontScale = Number.isFinite(+o.fontScale) && +o.fontScale > 0 ? +o.fontScale : 1;\n    ctx.font = '600 ' + cell * 0.56 * (CUR.glyph || 1) * fontScale + 'px ' + FONT_MONO;");
+ both(F,'source/render.js','function layoutList(ctx, texts, boxW, maxH, baseFs, minFs) {','function layoutList(ctx, texts, boxW, maxH, baseFs, minFs, arrangement, arrangementCount) {');
+ both(F,'source/render.js','const cols = Math.max(1, Math.min(6, n, Math.floor(boxW / itemW)));\n      const rows = Math.ceil(n / cols);\n      const lh = fs * 1.62;\n      res = { fs, cols, rows, colW: boxW / cols, lh, h: rows * lh, itemW: maxW + fs * 1.2 };\n      if (res.h <= maxH) return res;','const mode = arrangement === \'rows\' || arrangement === \'columns\' ? arrangement : \'auto\';\n      const requested = Math.max(1, Math.min(n, parseInt(arrangementCount, 10) || 2));\n      let cols, rows;\n      if (mode === \'columns\') { cols = requested; rows = Math.ceil(n / cols); }\n      else if (mode === \'rows\') { rows = requested; cols = Math.ceil(n / rows); }\n      else { cols = Math.max(1, Math.min(6, n, Math.floor(boxW / itemW))); rows = Math.ceil(n / cols); }\n      const lh = fs * 1.62;\n      res = { fs, cols, rows, colW: boxW / cols, lh, h: rows * lh, itemW: maxW + fs * 1.2 };\n      if (res.h <= maxH && (mode === \'auto\' || itemW <= res.colW)) return res;');
+ both(F,'source/render.js','L = layoutList(ctx, texts, availW, availH * 0.3, baseFs, minFs);','L = layoutList(ctx, texts, availW, availH * 0.3, baseFs, minFs, o.listArrange, o.listArrangeCount);');
+ both(F,'source/render.js','L = layoutList(ctx, texts, boxW, availH, baseFs, minFs);','L = layoutList(ctx, texts, boxW, availH, baseFs, minFs, o.listArrange, o.listArrangeCount);');
+ both(F,'source/render.js','const o2 = { solution: o.solution, lines: o.lines, outline: o.outline };','const o2 = { solution: o.solution, lines: o.lines, outline: o.outline, fontScale: o.gridScale };');
+ both(F,'source/app-book.js',"const BOOK_CONTROLS = ['sTitle', 'sSub', 'sList', 'sMargin', 'sBody', 'pnStyle'","const BOOK_CONTROLS = ['sTitle', 'sSub', 'sList', 'sGrid', 'sMargin', 'sBody', 'pnStyle'");
+ both(F,'source/app-book.js',"const BOOK_SLIDERS = ['sTitle', 'sSub', 'sList', 'sMargin', 'sBody', 'pnSize'];","const BOOK_SLIDERS = ['sTitle', 'sSub', 'sList', 'sGrid', 'sMargin', 'sBody', 'pnSize'];");
+ both(F,'source/app-book.js',"return { margin: v('sMargin', 6.5), titleScale: v('sTitle', 100), subScale: v('sSub', 100), listScale: v('sList', 100), bodyScale: v('sBody', 100) };","return { margin: v('sMargin', 6.5), titleScale: v('sTitle', 100), subScale: v('sSub', 100), listScale: v('sList', 100), gridScale: v('sGrid', 100), bodyScale: v('sBody', 100) };");
+ both(F,'source/app-book.js',"[['sTitle', 100], ['sSub', 100], ['sList', 100], ['sMargin', 6.5], ['sBody', 100]]","[['sTitle', 100], ['sSub', 100], ['sList', 100], ['sGrid', 100], ['sMargin', 6.5], ['sBody', 100]]");
+ both(F,'source/app-book.js',"if (S.tab === 'page') render();\n  syncExportUi();","render();\n  syncExportUi();");
+ both(F,'source/app-lib.js','return { showTitle: o.showTitle, title: o.title, list: o.list, lines: o.lines, outline: o.outline, offsets: clone(S.off) };','return { showTitle: o.showTitle, title: o.title, list: o.list, listArrange: o.listArrange || \'auto\', listArrangeCount: o.listArrangeCount || 2, lines: o.lines, outline: o.outline, offsets: clone(S.off) };');
+ both(F,'source/app-lib.js',"LIB.items.forEach((it) => { if (it.on) out.push({ name: it.name, puz: it.puz, page: it.page }); });","LIB.items.forEach((it) => { if (it.on) out.push({ name: it.name, puz: it.puz, page: Object.assign({}, it.page, { title: it.name }) }); });");
+ both(F,'source/app-lib.js',"const item = makeItem(name);\n  LIB.items.push(item);","$('title').value = name;\n  const item = makeItem(name);\n  LIB.items.push(item);\n  render();");
+ both(F,'source/app-lib.js',"$('showTitle').checked = p.showTitle; $('title').value = p.title; $('listMode').value = p.list;\n  $('lines').checked = p.lines; $('outline').checked = p.outline;","$('showTitle').checked = p.showTitle; $('title').value = it.name || p.title; $('listMode').value = p.list;\n  $('listArrange').value = p.listArrange || 'auto'; $('listArrangeCount').value = p.listArrangeCount || 2;\n  syncListArrangeUi();\n  $('lines').checked = p.lines; $('outline').checked = p.outline;");
+ F['PATCH_NOTES.txt']='Wordsearch Workshop update\n\nChanges:\n- Improved editable-field caret visibility and text selection/copy behavior.\n- Added adjustable grid-letter font size.\n- Added automatic, fixed-column, and fixed-row word-bank layout settings.\n- Saved puzzles now use their individual saved names as titles in the library and exports.\n\nAll original project files are included. Open index.html directly to use the bundled app. Source files remain under source/.\n';
+}
+function applySecondRound(F){
+ const nudgeOld='<p class="hint" id="nudgeHint"></p>';
+ const nudgeNew='<label class="switch" for="applyAllLayout"><input id="applyAllLayout" type="checkbox"><span class="track" aria-hidden="true"></span>Apply each layout move to all saved puzzles</label>\n                <p class="hint" id="nudgeHint"></p>';
+ both(F,'source/body.html',nudgeOld,nudgeNew);
+ const bulkOld='            </div>\n            <div class="group">\n              <h4>For the PDF';
+ const bulkNew='            </div>\n            <div class="group" id="bulkGenerateGroup">\n              <h4>Bulk generate word searches</h4>\n              <p class="hint">No blank lines needed between puzzles. Start each puzzle with <strong>Title: Puzzle Name</strong>, then put its words on the following lines. Separate words with new lines or commas.</p>\n              <label class="f" for="bulkInput">Puzzle titles and words\n                <textarea id="bulkInput" rows="10" spellcheck="false" placeholder="Title: Animal Kingdom&#10;LION, TIGER, ELEPHANT, ZEBRA&#10;MONKEY, GIRAFFE&#10;Title: Space Explorers&#10;PLANET, COMET, GALAXY&#10;ROCKET, NEBULA, SATURN"></textarea>\n              </label>\n              <button class="btn solid k-violet wide" id="bulkGenerate" type="button">Generate batch</button>\n              <p class="hint" id="bulkStatus" aria-live="polite">Uses the current grid, shape, directions, and difficulty for every puzzle.</p>\n            </div>\n            <div class="group">\n              <h4>For the PDF';
+ both(F,'source/body.html',bulkOld,bulkNew);
+ const helperOld='function nudge(dx, dy, big) {';
+ const helperNew=String.raw`function currentMatchesSavedLayout(it) {
+  if (!it || !it.src) return false;
+  const src = it.src;
+  return $('words').value === src.words && S.cols === src.cols && S.rows === src.rows &&
+    S.seed === src.seed && S.level === src.level && S.fill === src.fill && S.lang === src.lang && S.mode === src.mode &&
+    JSON.stringify(S.mask) === JSON.stringify(src.mask) &&
+    Array.from(S.dirs).sort().join(',') === (src.dirs || []).slice().sort().join(',');
+}
+
+function syncEditedOffsets(name, resetAll) {
+  const keys = resetAll ? ['title', 'grid', 'list'] : [name];
+  const updateItem = (it) => {
+    if (!it || !it.page || !it.page.offsets) return;
+    let touched = false;
+    keys.forEach((key) => {
+      // Page-number placement is book-wide already; the other elements can be page-specific.
+      if (!key || key === 'page' || !S.off[key]) return;
+      it.page.offsets[key] = clone(S.off[key]);
+      touched = true;
+    });
+    if (touched) persist(it);
+  };
+  if ($('applyAllLayout').checked) LIB.items.forEach(updateItem);
+  else {
+    const current = LIB.items.find((it) => it.id === LIB.loadedId);
+    if (currentMatchesSavedLayout(current)) updateItem(current);
+  }
+}
+
+function nudge(dx, dy, big) {`;
+ both(F,'source/app-ui.js',helperOld,helperNew);
+ const nudgeMoveOld='  o.y = r(clamp(o.y + dy * k, -b.by / info.base, (info.H - (b.by + b.h)) / info.base));\n  saveLayout();\n  syncNudge();\n  render();';
+ const nudgeMoveNew='  o.y = r(clamp(o.y + dy * k, -b.by / info.base, (info.H - (b.by + b.h)) / info.base));\n  saveLayout();\n  syncEditedOffsets(name);\n  syncNudge();\n  render();';
+ both(F,'source/app-ui.js',nudgeMoveOld,nudgeMoveNew);
+ const resetOneOld='  S.off[S.sel] = { x: 0, y: 0 };\n  saveLayout(); syncNudge(); render();';
+ const resetOneNew='  S.off[S.sel] = { x: 0, y: 0 };\n  saveLayout(); syncEditedOffsets(S.sel); syncNudge(); render();';
+ both(F,'source/app-ui.js',resetOneOld,resetOneNew);
+ const resetAllOld='  S.off = { title: { x: 0, y: 0 }, grid: { x: 0, y: 0 }, list: { x: 0, y: 0 }, page: { x: 0, y: 0 } };\n  saveLayout(); syncNudge(); render();';
+ const resetAllNew='  S.off = { title: { x: 0, y: 0 }, grid: { x: 0, y: 0 }, list: { x: 0, y: 0 }, page: { x: 0, y: 0 } };\n  saveLayout(); syncEditedOffsets(null, true); syncNudge(); render();';
+ both(F,'source/app-ui.js',resetAllOld,resetAllNew);
+ const bulkCode=String.raw`async function generateBulkBatch() {
+  const status = $('bulkStatus'), button = $('bulkGenerate');
+  if (!LIB.ready) { status.textContent = 'Saved-puzzle storage is still starting. Try again in a moment.'; return; }
+  const raw = $('bulkInput').value.trim();
+  if (!raw) { status.textContent = 'Paste at least one puzzle block first.'; $('bulkInput').focus(); return; }
+  const inputLines = raw.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  let blocks;
+  if (inputLines.some((line) => /^title\s*:/i.test(line))) {
+    blocks = [];
+    let current = null;
+    for (const line of inputLines) {
+      const match = line.match(/^title\s*:\s*(.*)$/i);
+      if (match) {
+        if (current) blocks.push(current);
+        current = [match[1].trim()];
+      } else {
+        if (!current) { status.textContent = 'Start each puzzle with "Title: Puzzle Name", then add its words below.'; return; }
+        current.push(line);
+      }
+    }
+    if (current) blocks.push(current);
+    blocks = blocks.filter((a) => a.length >= 2);
+  } else {
+    // Backwards compatible: also accept the old format with blank lines between blocks.
+    blocks = raw.split(/\n\s*\n+/).map((b) => b.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)).filter((a) => a.length >= 2);
+  }
+  if (!blocks.length) { status.textContent = 'Each puzzle needs a Title: line and at least one word below it.'; return; }
+  if (blocks.length > 200) { status.textContent = 'Please generate up to 200 puzzles per batch.'; return; }
+  button.disabled = true;
+  const ready = [], baseSeed = S.seed >>> 0, mask = clone(S.mask), dirs = Array.from(S.dirs);
+  const cols = mask[0] ? mask[0].length : S.cols, rows = mask.length;
+  const maskSrc = S.maskSrc && S.maskSrc.type === 'image' ? { type: 'custom' } : clone(S.maskSrc);
+  try {
+    for (let i = 0; i < blocks.length; i++) {
+      const lines = blocks[i].slice();
+      const name = lines.shift().slice(0, 60).trim();
+      const wordsText = lines.join('\n').trim();
+      const parsed = WS.parseWords(wordsText, S.lang);
+      if (!name || !parsed.length) throw new Error('Block ' + (i + 1) + ' needs a title and at least one valid word.');
+      const seed = (baseSeed + Math.imul(i + 1, 2654435761)) >>> 0;
+      const puz = WS.generate({ cols, rows, mask: clone(mask), words: parsed, dirs: dirs.slice(), level: S.level, fill: S.fill, seed, lang: S.lang, mode: S.mode === 'single' ? 'single' : undefined });
+      const page = pageSnapshot();
+      page.showTitle = true;
+      page.title = name;
+      ready.push({ name, wordsText, parsed, puz, page, seed });
+      status.textContent = 'Generating puzzle ' + (i + 1) + ' of ' + blocks.length + '…';
+      await tick();
+    }
+    const maxOrder = LIB.items.reduce((m, it) => Math.max(m, it.order), 0);
+    const additions = ready.map((b, i) => ({
+      id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + i,
+      name: b.name, order: maxOrder + i + 1, on: true, saved: Date.now() + i,
+      puz: clone(b.puz), page: clone(b.page),
+      src: { words: b.wordsText, cols: S.cols, rows: S.rows, lock: $('lock').checked, dirs: dirs.slice(), level: S.level, fill: S.fill, seed: b.seed, mask: clone(mask), maskSrc: clone(maskSrc), lang: S.lang, mode: S.mode }
+    }));
+    const incomplete = additions.filter((it) => it.puz.unplaced && it.puz.unplaced.length);
+    const warning = incomplete.length ? '\n\n' + incomplete.length + ' puzzle(s) have one or more words that did not fit the current grid. They will still be saved if you confirm.' : '';
+    const ok = window.confirm('Generated ' + additions.length + ' word-search puzzle(s).\n\nSave them to Your book now?' + warning + '\n\nChoose Cancel to discard this batch.');
+    if (!ok) { status.textContent = 'Generated ' + additions.length + ' puzzles, but none were saved.'; return; }
+    LIB.items.push(...additions);
+    LIB.items.sort((a, b) => a.order - b.order);
+    await Promise.all(additions.map((it) => persist(it)));
+    renderLib();
+    syncExportUi();
+    status.textContent = 'Saved ' + additions.length + ' puzzle(s). They are ticked for the PDF.';
+    toast('Saved ' + additions.length + ' word-search puzzles.');
+  } catch (err) {
+    status.textContent = 'Batch generation stopped: ' + ((err && err.message) || 'unknown error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('bulkGenerate').addEventListener('click', generateBulkBatch);
+`;
+ const bindOld="$('libSave').addEventListener('click', saveCurrent);\n$('libName').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveCurrent(); });";
+ const bindNew="$('libSave').addEventListener('click', saveCurrent);\n"+bulkCode+"\n$('libName').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveCurrent(); });";
+ both(F,'source/app-lib.js',bindOld,bindNew);
+ const noteOld='- Saved puzzles now use their individual saved names as titles in the library and exports.\n\nAll original project files are included.';
+ const noteNew='- Saved puzzles now use their individual saved names as titles in the library and exports.\n- Added an Apply to all layout checkbox: selected element moves can be shared across saved puzzle pages, or kept individual when unchecked.\n- Added batch generation from title-and-word blocks, with a confirmation before saving all generated puzzles. Use `Title: Puzzle Name` markers to separate sets without blank lines.\n\nAll original project files are included.';
+ patch(F,'PATCH_NOTES.txt',noteOld,noteNew);
+}
+
+function u8(s){return new TextEncoder().encode(s)}function crc32(a){let c=0xffffffff;for(let b of a){c^=b;for(let j=0;j<8;j++)c=c&1?(c>>>1)^0xedb88320:c>>>1;}return(c^0xffffffff)>>>0}function u16(d,o,v){d.setUint16(o,v,true)}function u32(d,o,v){d.setUint32(o,v>>>0,true)}
+function makeZip(files){const locals=[],centrals=[];let offset=0;const encoder=new TextEncoder();for(const [name,text]of Object.entries(files)){const nm=encoder.encode(name),data=encoder.encode(text),crc=crc32(data);const lh=new Uint8Array(30+nm.length+data.length),ld=new DataView(lh.buffer);u32(ld,0,0x04034b50);u16(ld,4,20);u16(ld,6,0x800);u16(ld,8,0);u16(ld,10,0);u16(ld,12,0x21);u32(ld,14,crc);u32(ld,18,data.length);u32(ld,22,data.length);u16(ld,26,nm.length);u16(ld,28,0);lh.set(nm,30);lh.set(data,30+nm.length);locals.push(lh);const ch=new Uint8Array(46+nm.length),cd=new DataView(ch.buffer);u32(cd,0,0x02014b50);u16(cd,4,20);u16(cd,6,20);u16(cd,8,0x800);u16(cd,10,0);u16(cd,12,0);u16(cd,14,0x21);u32(cd,16,crc);u32(cd,20,data.length);u32(cd,24,data.length);u16(cd,28,nm.length);u16(cd,30,0);u16(cd,32,0);u16(cd,34,0);u16(cd,36,0);u32(cd,38,0);u32(cd,42,offset);ch.set(nm,46);centrals.push(ch);offset+=lh.length;}const cdSize=centrals.reduce((n,c)=>n+c.length,0),end=new Uint8Array(22),ed=new DataView(end.buffer);u32(ed,0,0x06054b50);u16(ed,4,0);u16(ed,6,0);u16(ed,8,centrals.length);u16(ed,10,centrals.length);u32(ed,12,cdSize);u32(ed,16,offset);u16(ed,20,0);const total=offset+cdSize+end.length,out=new Uint8Array(total);let p=0;for(const b of locals){out.set(b,p);p+=b.length;}for(const b of centrals){out.set(b,p);p+=b.length;}out.set(end,p);return out}
+$('build').addEventListener('click',async()=>{const btn=$('build');btn.disabled=true;try{const files={};for(let i=0;i<FILES.length;i++){setStatus('Recovering saved repository files: '+(i+1)+' / '+FILES.length+'\n'+FILES[i][0]);files[FILES[i][0]]=await fetchBlob(FILES[i][0],FILES[i][1]);}setStatus('Applying the requested fixes and new features…');applyFixes(files);applySecondRound(files);for(const [p,need]of Object.entries({'index.html':['id="listArrange"','id="sGrid"','gridScale: v(\'sGrid\', 100)','title: it.name'],'source/body.html':['id="listArrange"','id="sGrid"','id="bulkInput"','id="applyAllLayout"'],'source/render.js':['arrangementCount','fontScale: o.gridScale'],'source/app-lib.js':['title: it.name','it.name || p.title','async function generateBulkBatch()','Save them to Your book now'],'source/app-ui.js':['applyAllLayout','syncEditedOffsets(name)']})){for(const n of need)if(!files[p].includes(n))throw Error('Validation failed for '+p+': missing '+n);}setStatus('Building the ZIP archive…');const zip=makeZip(files);const blob=new Blob([zip],{type:'application/zip'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='word-search-fixed.zip';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setStatus('Done. Downloaded word-search-fixed.zip with '+Object.keys(files).length+' files ('+Math.round(zip.length/1024)+' KB).');}catch(e){setStatus('Could not build the ZIP: '+(e&&e.message||e)+'\nIf the browser blocks opening this file locally, open it in an online HTML preview or serve this folder with a local web server.');}finally{btn.disabled=false;} });
+</script>
+</body>
+</html>
