@@ -1,0 +1,11 @@
+Wordsearch Workshop update
+
+Changes:
+- Improved editable-field caret visibility and text selection/copy behavior.
+- Added adjustable grid-letter font size.
+- Added automatic, fixed-column, and fixed-row word-bank layout settings.
+- Saved puzzles now use their individual saved names as titles in the library and exports.
+- Added an Apply to all layout checkbox: selected element moves can be shared across saved puzzle pages, or kept individual when unchecked.
+- Added batch generation from title-and-word blocks, with a confirmation before saving all generated puzzles. Use `Title: Puzzle Name` markers to separate sets without blank lines.
+
+All original project files are included. Open index.html directly to use the bundled app. Source files remain under source/.
